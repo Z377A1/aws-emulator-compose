@@ -9,6 +9,7 @@ Compose setup for [Getting started with Docker](https://docs.aws.amazon.com/emul
    - macOS/Linux: `mkdir -p ~/.aws/emulator`
    - PowerShell: `New-Item -ItemType Directory -Force "$env:USERPROFILE\.aws\emulator"`
 3. `docker compose up --build` (add `-d` to run in the background).
+   Optional: `docker compose -f compose.caddy.yaml up -d` for `https://aws-emulator-9297.localhost` (see below).
 
 Stop with Ctrl+C or `docker compose down`. Emulated resources live in memory and are lost on stop.
 
@@ -66,9 +67,39 @@ Check: `curl --cacert ~/.aws/emulator/9297/ca.pem https://127.0.0.1:9297/__admin
 
 Node.js needs `NODE_EXTRA_CA_CERTS`, Rust/.NET need `SSL_CERT_FILE` (both → `ca.pem`); Java uses `truststore.p12`.
 
+## HTTPS / HTTP via Caddy
+
+A shared Caddy ([compose.caddy.yaml](compose.caddy.yaml)) gives every emulator project its own URL, based on its `EMULATOR_PORT`:
+
+| Emulator | URLs |
+| --- | --- |
+| `docker compose up -d` | `https://aws-emulator-9297.localhost`, `http://aws-emulator-9297.localhost` |
+| `EMULATOR_PORT=9300 docker compose -p emu9300 up -d` | `https://aws-emulator-9300.localhost`, `http://aws-emulator-9300.localhost` |
+
+```sh
+mkdir -p volumes/caddy/data volumes/caddy/config volumes/caddy/certs/root   # Linux: before first run
+docker compose -f compose.caddy.yaml up -d     # once; start/stop independently of the emulators
+docker compose -f compose.caddy.yaml down
+```
+
+Start order doesn't matter: both stacks join the `aws-emulator` Docker network, and the emulator gets the alias `aws-emulator-<EMULATOR_PORT>` on it. Unknown hosts get a 404 (HTTP) or no certificate (HTTPS). `<bucket>.aws-emulator-<port>.localhost` works too (S3 virtual-hosted style).
+
+Caddy's local CA is written to `volumes/caddy/certs/root/` (`root.crt` plus its private key; `volumes/` is git-ignored) and reused across restarts. Use `root.crt` as the CA bundle, or trust it once in your OS/browser. Plain `http://` needs no CA.
+
+Point the SDK at Caddy using the same variables as above, but with:
+
+```sh
+export AWS_ENDPOINT_URL=https://aws-emulator-9297.localhost     # or http://aws-emulator-9297.localhost
+export AWS_CA_BUNDLE=$PWD/volumes/caddy/certs/root/root.crt
+```
+
+Credentials and config still come from `~/.aws/emulator/<EMULATOR_PORT>/`.
+
+Ports: `CADDY_HTTPS_PORT` (443) and `CADDY_HTTP_PORT` (80); if you change them, add the port to the URLs. After editing [conf/Caddyfile](conf/Caddyfile): `docker compose -f compose.caddy.yaml exec caddy caddy reload --config /etc/caddy/Caddyfile`.
+
 ## Notes
 
 - The port is bound to `127.0.0.1` only. Keep host and container ports equal (`EMULATOR_PORT`); never use port 0.
-- To run several emulators, use separate project names and ports, e.g. `EMULATOR_PORT=9300 docker compose -p emu9300 up`.
+- To run several emulators, use separate project names and ports, e.g. `EMULATOR_PORT=9300 docker compose -p emu9300 up`. The shared Caddy then serves it at `https://aws-emulator-9300.localhost`.
 - Telemetry data lives in the named volume `telemetry`, not the bind mount. Its SQLite `-shm` file crashes the emulator (exit 135) on Docker Desktop bind mounts after the first run. Set `EMULATOR_TELEMETRY=off` to opt out.
-- Remove: `docker compose down --rmi all -v`, and optionally delete `~/.aws/emulator`.
+- Remove: `docker compose down --rmi all -v` and `docker compose -f compose.caddy.yaml down`, and optionally delete `~/.aws/emulator` and `volumes/` (deleting `volumes/caddy/certs/root` creates a new CA next run).

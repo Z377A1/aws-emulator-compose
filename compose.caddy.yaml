@@ -1,0 +1,42 @@
+# Shared Caddy for all emulator projects started from this folder. Start once:
+#   docker compose -f compose.caddy.yaml up -d
+# Routes https:// and http://aws-emulator-<EMULATOR_PORT>.localhost to the
+# emulator with that port, e.g. https://aws-emulator-9297.localhost.
+# Its local CA root is written to ./volumes/caddy/certs/root/root.crt.
+name: aws-emulator-caddy
+
+networks:
+  aws-emulator:
+    name: aws-emulator
+
+services:
+  caddy:
+    image: caddy:${CADDY_VERSION:-2}
+    restart: unless-stopped
+    user: "${UID:-1000}:${GID:-1000}"
+    ports:
+      - "127.0.0.1:${CADDY_HTTPS_PORT:-443}:8443"
+      - "127.0.0.1:${CADDY_HTTPS_PORT:-443}:8443/udp"
+      - "127.0.0.1:${CADDY_HTTP_PORT:-80}:8080"
+    networks:
+      - aws-emulator
+    volumes:
+      - ./conf:/etc/caddy:ro
+      - ./volumes/caddy/data:/data
+      - ./volumes/caddy/config:/config
+      # Caddy's local CA (root.crt/root.key + intermediate). Mounted beside
+      # /data and symlinked in by the command below: a nested mount would make
+      # Docker create /data/caddy as root, which the non-root Caddy can't write.
+      - ./volumes/caddy/certs/root:/certs/root
+    command:
+      - sh
+      - -c
+      - >-
+        mkdir -p /data/caddy/pki/authorities &&
+        ln -sfn /certs/root /data/caddy/pki/authorities/local &&
+        exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+    deploy:
+      resources:
+        limits:
+          cpus: "${CADDY_DOCKER_CPU_LIMIT:-1}"
+          memory: "${CADDY_DOCKER_MEMORY_LIMIT:-512M}"

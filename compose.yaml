@@ -38,6 +38,17 @@ services:
     command: ["-p", "${EMULATOR_PORT:-9297}"]
     # Give the emulator time to clean up ~/.aws/emulator/<port>/ on shutdown.
     stop_grace_period: 15s
+    networks:
+      default:
+      # Shared with the Caddy stack (compose.caddy.yaml), which routes
+      # aws-emulator-<EMULATOR_PORT>.localhost to this alias.
+      aws-emulator:
+        aliases: ["aws-emulator-${EMULATOR_PORT:-9297}"]
 
 volumes:
   telemetry:
+
+networks:
+  aws-emulator:
+    name: aws-emulator
+    # Created by whichever stack starts first (this one or compose.caddy.yaml).

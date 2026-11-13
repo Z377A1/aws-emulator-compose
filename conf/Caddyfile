@@ -1,0 +1,61 @@
+# Shared reverse proxy for every emulator project (see compose.caddy.yaml).
+#   https://aws-emulator-<port>.localhost -> emulator listening on <port>
+#   http://aws-emulator-<port>.localhost  -> same, plain HTTP (no CA needed)
+# <bucket>.aws-emulator-<port>.localhost works too (S3 virtual-hosted style).
+# After editing, reload (instead of recreating the container):
+#   docker compose -f compose.caddy.yaml exec caddy caddy reload --config /etc/caddy/Caddyfile
+{
+	# Unprivileged ports inside the container; compose maps host ports to them.
+	http_port 8080
+	https_port 8443
+	# Serve HTTP as-is instead of redirecting it to HTTPS.
+	auto_https disable_redirects
+	# The container can't add the root CA to your host's trust store; trust
+	# ./volumes/caddy/certs/root/root.crt yourself.
+	skip_install_trust
+	# Certificates are issued per host on first request, but only for
+	# emulator host names (checked by the :9123 site below).
+	on_demand_tls {
+		ask http://127.0.0.1:9123/
+	}
+}
+
+(emulator) {
+	@emulator header_regexp emu Host ^(?:[a-z0-9.-]+\.)?aws-emulator-([0-9]+)\.localhost(?::[0-9]+)?$
+	handle @emulator {
+		# Each emulator joins the aws-emulator network with alias
+		# aws-emulator-<port>. It only speaks HTTPS, with a self-signed CA it
+		# regenerates on every start, so skip verifying this internal hop.
+		reverse_proxy aws-emulator-{re.emu.1}:{re.emu.1} {
+			# SigV4 signs the Host header. Caddy rewrites Host to the upstream
+			# address for HTTPS upstreams; keep the client's so signatures match.
+			header_up Host {hostport}
+			# TLS is enabled here (a scheme can't be combined with placeholders).
+			transport http {
+				tls
+				tls_insecure_skip_verify
+			}
+		}
+	}
+	respond "Unknown host; use aws-emulator-<EMULATOR_PORT>.localhost" 404
+}
+
+https:// {
+	tls internal {
+		on_demand
+	}
+	import emulator
+}
+
+http:// {
+	import emulator
+}
+
+# On-demand TLS approval: allow only (<bucket>.)aws-emulator-<port>.localhost.
+# Listens inside the container only (port not published).
+http://127.0.0.1:9123 {
+	bind 127.0.0.1
+	@allowed expression `{query.domain}.matches("^([a-z0-9.-]+\\.)?aws-emulator-[0-9]+\\.localhost$")`
+	respond @allowed 200
+	respond 403
+}

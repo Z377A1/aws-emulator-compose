@@ -1,1 +1,4 @@
 .env
+
+# Caddy data, config and root CA (contains the private key)
+volumes/
