@@ -1,0 +1,33 @@
+services:
+  aws-emulator:
+    build:
+      context: .
+      args:
+        EMULATOR_ARCH: ${EMULATOR_ARCH:-x86_64}
+    image: aws-emulator
+    environment:
+      EMULATOR_TELEMETRY: ${EMULATOR_TELEMETRY:-on}
+    # Linux: set UID/GID in .env so generated files belong to you.
+    user: "${UID:-1000}:${GID:-1000}"
+    # 2 GiB, no swap (exit code 137 if exceeded; emulated resources are lost).
+    mem_limit: 2g
+    memswap_limit: 2g
+    ports:
+      # Bind to localhost only; "9297:9297" would expose it to your network.
+      - "127.0.0.1:${EMULATOR_PORT:-9297}:${EMULATOR_PORT:-9297}"
+    volumes:
+      # Shares generated credentials, config and ca.pem with the host SDK,
+      # and keeps the telemetry ID between runs.
+      - ${EMULATOR_DIR:-~/.aws/emulator}:/home/emulator/.aws/emulator
+      # Telemetry keeps a SQLite WAL DB; its mmap'd -shm file crashes the
+      # emulator (exit 135, SIGBUS) on Docker Desktop bind mounts after the
+      # first run. Keep it in a named volume instead.
+      - telemetry:/home/emulator/.aws/emulator/telemetry
+    # Container and host port must match: the emulator writes its port into
+    # the config/credentials files it generates. Don't use port 0.
+    command: ["-p", "${EMULATOR_PORT:-9297}"]
+    # Give the emulator time to clean up ~/.aws/emulator/<port>/ on shutdown.
+    stop_grace_period: 15s
+
+volumes:
+  telemetry:
