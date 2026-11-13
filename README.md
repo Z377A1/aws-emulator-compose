@@ -22,6 +22,17 @@ docker compose exec aws-emulator /bin/sh
 
 Exit the shell with `exit`.
 
+## AWS CLI in the container
+
+The image includes [AWS CLI v2](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html), already set up to use the emulator (see `environment` in `compose.yaml`). You don't need to install or configure anything on the host:
+
+```sh
+docker compose exec aws-emulator aws sts get-caller-identity   # account 000000000000
+docker compose exec aws-emulator aws s3 mb s3://my-bucket
+```
+
+Or run `aws` from a shell inside the container.
+
 ## Point your SDK at it
 
 PowerShell (replace 9297 if you changed `EMULATOR_PORT`):

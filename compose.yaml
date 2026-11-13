@@ -6,7 +6,17 @@ services:
         EMULATOR_ARCH: ${EMULATOR_ARCH:-x86_64}
     image: aws-emulator
     environment:
-      EMULATOR_TELEMETRY: ${EMULATOR_TELEMETRY:-on}
+      EMULATOR_TELEMETRY: ${EMULATOR_TELEMETRY:-off}
+      # Point the bundled AWS CLI (docker compose exec ... aws) at the emulator.
+      AWS_ENDPOINT_URL: https://127.0.0.1:${EMULATOR_PORT:-9297}
+      AWS_SHARED_CREDENTIALS_FILE: /home/emulator/.aws/emulator/${EMULATOR_PORT:-9297}/emulator_credentials
+      AWS_CONFIG_FILE: /home/emulator/.aws/emulator/${EMULATOR_PORT:-9297}/config
+      AWS_CA_BUNDLE: /home/emulator/.aws/emulator/${EMULATOR_PORT:-9297}/ca.pem
+      AWS_EC2_METADATA_DISABLED: "true"
+      AWS_DISABLE_HOST_PREFIX_INJECTION: "true"
+      AWS_REGION: us-east-1
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_PAGER: ""
     # Linux: set UID/GID in .env so generated files belong to you.
     user: "${UID:-1000}:${GID:-1000}"
     # 2 GiB, no swap (exit code 137 if exceeded; emulated resources are lost).
