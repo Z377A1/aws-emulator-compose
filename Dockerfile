@@ -7,7 +7,8 @@ ARG EMULATOR_ARCH=x86_64
 # AWS CLI v2, per https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html
 # (zip names use the same x86_64/aarch64 suffixes as the emulator RPM).
 ADD https://awscli.amazonaws.com/awscli-exe-linux-${EMULATOR_ARCH}.zip /tmp/awscliv2.zip
-RUN dnf install -y unzip \
+# ncurses provides `clear` for interactive shells (missing from the minimal image).
+RUN dnf install -y unzip ncurses \
     && unzip -q /tmp/awscliv2.zip -d /tmp \
     && /tmp/aws/install \
     && rm -rf /tmp/aws /tmp/awscliv2.zip \
