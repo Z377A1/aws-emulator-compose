@@ -12,6 +12,16 @@ Compose setup for [Getting started with Docker](https://docs.aws.amazon.com/emul
 
 Stop with Ctrl+C or `docker compose down`. Emulated resources live in memory and are lost on stop.
 
+## Shell into the container
+
+While the emulator is running, open another terminal and run:
+
+```sh
+docker compose exec aws-emulator /bin/sh
+```
+
+Exit the shell with `exit`.
+
 ## Point your SDK at it
 
 PowerShell (replace 9297 if you changed `EMULATOR_PORT`):
